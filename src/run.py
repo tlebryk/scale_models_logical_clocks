@@ -72,6 +72,8 @@ class VM:
         sender = msg_decoded["sender"]
         clock_value = int(msg_decoded["clock"])
         self.clock.compare(clock_value)
+        event = f"Received message from VM {sender}; length message queue: {self.message_queue.qsize()}"
+        self.log_event(event)
 
     def send_message(self, message: bytearray, destination_vm_id: int):
         if destination_vm_id in self.sockets:
@@ -94,6 +96,23 @@ class VM:
     def log_event(self, event: str):
         """Log an event using the dedicated VM logger."""
         self.logger.info(f"Event: {event}", extra={"logical_clock": self.clock})
+
+    def run(self):
+        self.start_server()
+        # Pause briefly to let the server start.
+        time.sleep(1)
+        self.setup_peer_connections()
+        self.event_loop()
+
+    # mock methods
+    def setup_peer_connections(self):
+        pass
+
+    def start_server(self):
+        pass
+
+    def event_loop(self):
+        pass
 
 
 if __name__ == "__main__":

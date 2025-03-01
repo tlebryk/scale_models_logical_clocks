@@ -1,4 +1,6 @@
+# logger.py
 import logging
+from clock import LamportClock
 
 
 class LogicalClockAdapter(logging.LoggerAdapter):
@@ -10,7 +12,7 @@ class LogicalClockAdapter(logging.LoggerAdapter):
         return msg, kwargs
 
 
-def setup_logger(vm_id, logical_clock, log_level=logging.INFO):
+def setup_logger(vm_id, logical_clock: LamportClock, log_level=logging.INFO):
     logger = logging.getLogger(f"VM_{vm_id}")
     logger.setLevel(log_level)
 
