@@ -7,23 +7,27 @@ import socket
 import json
 from queue import Queue
 import os
+import threading
 
 
 class VM:
-    def __init__(
-        self,
-        vm_id: int,
-        tick_rate: Optional[int] = None,
-        sockets: Optional[Dict] = None,
-    ):
+    def __init__(self, 
+                 vm_id: int, 
+                 port: int, 
+                 peers: Optional[Dict] = None):
+        # Initialize the logical clock for this VM.
         self.clock = LamportClock(str(vm_id))
-        if not tick_rate:
-            tick_rate = random.randint(1, 6)
-        self.tick_rate = tick_rate
+        # Set up a random tick rate between 1 and 6 ticks per second.
+        self.tick_rate = random.randint(1, 6)
         self.vm_id = vm_id
+        self.port = port  # Port on which this VM will listen for incoming connections.
         self.logger = logger.setup_logger(self.vm_id, self.clock)
-        self.sockets = sockets
+        # Store peers configuration (expected to be a dict of {peer_id: port})
+        self.peers = peers if peers is not None else {}
+        # Dictionary to store persistent outgoing connections to peers.
+        self.peer_sockets = {}
         self.message_queue = Queue()
+
 
     def internal_action(self):
         action = random.randint(1, 10)
@@ -47,6 +51,8 @@ class VM:
             self.logical_clock.increment()
             self.log_event(f"Internal event, Logical Clock: {self.logical_clock}")
 
+
+
     def setup_peer_connection(self, peer_id, port):
         """Establish persistent outgoing connections to each peer."""
         for peer_id, port in self.peers.items():
@@ -61,6 +67,7 @@ class VM:
                 self.logger.error(
                     f"Error connecting to peer VM {peer_id} on port {port}: {e}"
                 )
+
 
     def recv_message(self):
         # TODO: socket logic to use message queue instead.
@@ -97,22 +104,78 @@ class VM:
         """Log an event using the dedicated VM logger."""
         self.logger.info(f"Event: {event}", extra={"logical_clock": self.clock})
 
+
     def run(self):
         self.start_server()
         # Pause briefly to let the server start.
         time.sleep(1)
         self.setup_peer_connections()
+        # setting up server for first vm, check if the server id is 1, 
+        # if it is then send ping to other 2 servers
+        if self.vm_id == 1:
+                ping_message = json.dumps({"sender": self.vm_id, "clock": self.clock.value, "type": "ping"}).encode("utf-8")
+                for peer_id in self.peer_sockets:
+                    try:
+                        self.peer_sockets[peer_id].sendall(ping_message)
+                        self.logger.info(f"Sent ping to VM {peer_id}")
+                    except Exception as e:
+                        self.logger.error(f"Error sending ping to VM {peer_id}: {e}")
         self.event_loop()
 
-    # mock methods
+
+        self.event_loop()
+
     def setup_peer_connections(self):
-        pass
+        # Establish persistent outgoing connections to all peers.
+        for peer_id_str, peer_port in self.peers.items():
+            if int(peer_id_str) == self.vm_id:
+                continue
+            try:
+                sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                sock.connect(("localhost", peer_port))
+                self.peer_sockets[int(peer_id_str)] = sock
+                self.logger.info(f"Connected persistently to peer VM {peer_id_str} on port {peer_port}")
+            except Exception as e:
+                self.logger.error(f"Error connecting to peer VM {peer_id_str} on port {peer_port}: {e}")
+
+    
 
     def start_server(self):
-        pass
+            # Start a server to listen for incoming connections.
+            self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            self.server_socket.bind(("localhost", self.port))
+            self.server_socket.listen(5)
+            self.logger.info(f"Server listening on port {self.port}")
+            # Start a new thread to accept incoming connections.
+            threading.Thread(target=self.accept_connections, daemon=True).start()
 
-    def event_loop(self):
-        pass
+    def accept_connections(self):
+        # Continuously accept incoming connections.
+        while True:
+            client_socket, addr = self.server_socket.accept()
+            self.logger.info(f"Accepted connection from {addr}")
+            # Start a new thread to handle the client's messages.
+            threading.Thread(target=self.handle_client, args=(client_socket,), daemon=True).start()
+
+    
+    def handle_client(self, client_socket):
+        """
+        function to set up message queue
+        """
+        # Handle incoming messages from a connected client.
+        while True:
+            try:
+                message = client_socket.recv(1024)
+                if not message:
+                    break
+                # Instead of processing immediately, add the message to the queue.
+                self.message_queue.put(message)
+            except Exception as e:
+                self.logger.error(f"Error handling client message: {e}")
+                break
+        client_socket.close()
+
+
 
 
 if __name__ == "__main__":
@@ -123,7 +186,7 @@ if __name__ == "__main__":
     peers_str = os.environ.get("PEERS", "{}")
     peers = json.loads(peers_str)
 
-    vm = VirtualMachine(vm_id, port, peers)
+    vm = VM(vm_id, port, peers)
     try:
         vm.run()
     except KeyboardInterrupt:
