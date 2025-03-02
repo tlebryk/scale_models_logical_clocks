@@ -21,7 +21,7 @@ def setup_logger(vm_id, logical_clock: LamportClock, log_level=logging.INFO):
         file_handler.setLevel(log_level)
         formatter = logging.Formatter(
             "%(asctime)s | VM %(name)s | %(levelname)s | %(message)s"
-        )
+        ) # look how to add line number of the log 
         file_handler.setFormatter(formatter)
         logger.addHandler(file_handler)
 
