@@ -1,0 +1,72 @@
+version: '3'
+
+services:
+  vm1:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lamport-vm1
+    environment:
+      VM_ID: 1
+      PORT: 5001
+      PEERS: '{}'
+      ENVIRONMENT: docker
+      TOTAL_VMS: 3
+      STARTUP_TIMEOUT: 60
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - lamport-network
+
+  vm2:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lamport-vm2
+    environment:
+      VM_ID: 2
+      PORT: 5002
+      PEERS: '{"1": 5001}'
+      ENVIRONMENT: docker
+      TOTAL_VMS: 3
+      STARTUP_TIMEOUT: 60
+    ports:
+      - "5002:5002"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - lamport-network
+    depends_on:
+      - vm1
+
+  vm3:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lamport-vm3
+    environment:
+      VM_ID: 3
+      PORT: 5003
+      PEERS: '{"1": 5001, "2": 5002}'
+      ENVIRONMENT: docker
+      TOTAL_VMS: 3
+      STARTUP_TIMEOUT: 60
+    ports:
+      - "5003:5003"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - lamport-network
+    depends_on:
+      - vm1
+      - vm2
+
+networks:
+  lamport-network:
+    driver: bridge
+
+volumes:
+  logs:
+    driver: local
