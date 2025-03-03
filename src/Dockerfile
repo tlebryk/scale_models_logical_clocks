@@ -2,11 +2,13 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Copy your Python code into the container.
-COPY vm.py ./
+# Copy all Python files into the container
+COPY *.py ./
 
-# (Optional) Copy a requirements.txt if you add any dependencies.
-# COPY requirements.txt ./
-# RUN pip install --no-cache-dir -r requirements.txt
+# Create logs directory
+RUN mkdir -p /app/logs
 
-CMD ["python", "vm.py"]
+# Expose ports for VM communication
+EXPOSE 5001-5003
+
+CMD ["python", "run.py"]
