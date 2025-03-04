@@ -19,7 +19,11 @@ class LogicalClockFilter(logging.Filter):
 
 
 def setup_logger(
-    vm_id, logical_clock, log_level=logging.INFO, file_mode="w", log_dir="./logs"
+    vm_id,
+    logical_clock,
+    log_level=logging.INFO,
+    file_mode="w",
+    log_dir="./logs/logs_trials",
 ):
     os.makedirs(log_dir, exist_ok=True)
     logger = logging.getLogger(f"VM_{vm_id}")
