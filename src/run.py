@@ -34,23 +34,32 @@ def get_vm_host(vm_id):
 
 class VM:
     def __init__(
-        self, vm_id: int, port: int, peers: Optional[Dict] = None, logmode="w"
+        self,
+        vm_id: int,
+        port: int,
+        peers: Optional[Dict] = None,
+        logmode="w",
+        tick_rate=1,
+        log_dir="./logs/logs_trials",
+        run_time=100,
+        max_action=10,
     ):
         self.clock = LamportClock(str(vm_id))
-        self.tick_rate = random.randint(1, 6)
+        self.tick_rate = tick_rate
         self.vm_id = vm_id
         self.port = port
+        self.max_action = max_action
         # TODO: use new log file every time we run
-        self.logger = logger.setup_logger(self.vm_id, self.clock, file_mode=logmode)
+        self.logger = logger.setup_logger(
+            self.vm_id, self.clock, file_mode=logmode, log_dir=log_dir
+        )
         self.logger.info(f"Tick rate: {self.tick_rate}")
         # Store peers configuration (dict of {peer_id: port})
         self.peers = peers if peers is not None else {}
         # store outgoing connections to peers.
         self.peer_sockets = {}
         self.message_queue = Queue()
-
-    # NOTE: Pls check and see if this logic is correct based on the instructions,
-    #  may need to edit when logical clocks are incremented
+        self.run_time = run_time
 
     # Add this to the VM class
     def wait_for_all_vms(self):
@@ -104,7 +113,6 @@ class VM:
         self.clock.increment()
         if action == 1:
             if peer_ids:
-                # send message to A
                 self.send_message(message, peer_ids[0])
                 self.log_event(f"Sent message to VM {peer_ids[0]}")
             else:
@@ -112,21 +120,18 @@ class VM:
 
         elif action == 2:
             if len(peer_ids) >= 2:
-                # send message to second available peer
                 self.send_message(message, peer_ids[1])
                 self.log_event(f"Sent message to VM {peer_ids[1]}")
             else:
                 self.log_event("Internal event (not enough peers for action 2)")
         elif action == 3:
             if len(peer_ids) >= 2:
-                # send message to A & B (first 2 available peers)
                 self.send_message(message, peer_ids[0])
                 self.send_message(message, peer_ids[1])
                 self.log_event(f"Sent messages to VM {peer_ids[0]}, {peer_ids[1]}")
             else:
                 self.log_event("Internal event (not enough peers for action 3)")
         else:
-            # just perform an internal event
             self.log_event(f"Internal event")
 
     def recv_message(self):
@@ -141,7 +146,7 @@ class VM:
         self.log_event(event)
 
     def send_message(self, message: bytearray, destination_vm_id: int):
-        # Ensure the connection is established
+        # Ensure the connection is established in case it was dropped or something
         if destination_vm_id not in self.peer_sockets:
             self.setup_peer_connection(destination_vm_id)
         # Append newline if it's not already there, to ensure proper delimiting
@@ -151,7 +156,6 @@ class VM:
         if sock:
             try:
                 sock.sendall(message)
-                # self.log_event(f"Sent message to VM {destination_vm_id}")
             except Exception as e:
                 self.logger.error(
                     f"Error sending message to VM {destination_vm_id}: {e}"
@@ -161,8 +165,12 @@ class VM:
 
     def event_loop(self):
         # continuous event loop to simulate clock ticks
+        looptime = time.time()
         while True:
+
             start_time = time.time()
+            if start_time - looptime >= self.run_time:
+                break
             if not self.message_queue.empty():
                 # process one message from the queue
                 message = self.message_queue.get()
@@ -372,12 +380,22 @@ if __name__ == "__main__":
     # Read configuration from environment variables.
     vm_id = int(os.environ.get("VM_ID", "1"))
     port = int(os.environ.get("PORT", "5001"))
-    # The PEERS environment variable should be a JSON string.
-    # note for setup: VM1 has no peers, VM2 connects to VM1, VM3 connects to VM1 and VM2, etc.
     peers_str = os.environ.get("PEERS", "{}")
+    tick_rate = int(os.environ.get("TICK_RATE", "1"))
+    log_dir = os.environ.get("LOG_DIR", "./logs/logs_trials")
+    run_time = int(os.environ.get("RUN_TIME", "100"))
+    max_action = int(os.environ.get("MAX_ACTION", "10"))
     peers = json.loads(peers_str)
 
-    vm = VM(vm_id, port, peers)
+    vm = VM(
+        vm_id,
+        port,
+        peers,
+        tick_rate=tick_rate,
+        log_dir=log_dir,
+        run_time=run_time,
+        max_action=max_action,
+    )
     try:
         vm.run()
     except KeyboardInterrupt:

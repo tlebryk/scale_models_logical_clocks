@@ -13,6 +13,9 @@ services:
       ENVIRONMENT: docker
       TOTAL_VMS: 3
       STARTUP_TIMEOUT: 60
+      TICK_RATE: 1
+      LOG_DIR: /app/logs/5_max_action
+      MAX_ACTION: 10
     ports:
       - "5001:5001"
     volumes:
@@ -32,6 +35,9 @@ services:
       ENVIRONMENT: docker
       TOTAL_VMS: 3
       STARTUP_TIMEOUT: 60
+      TICK_RATE: 4
+      LOG_DIR: /app/logs/5_max_action
+      MAX_ACTION: 10
     ports:
       - "5002:5002"
     volumes:
@@ -53,6 +59,9 @@ services:
       ENVIRONMENT: docker
       TOTAL_VMS: 3
       STARTUP_TIMEOUT: 60
+      TICK_RATE: 6
+      LOG_DIR: /app/logs/5_max_action
+      MAX_ACTION: 10
     ports:
       - "5003:5003"
     volumes:
