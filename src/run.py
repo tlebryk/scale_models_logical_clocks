@@ -131,6 +131,36 @@ class VM:
                 self.log_event(f"Sent messages to VM {peer_ids[0]}, {peer_ids[1]}")
             else:
                 self.log_event("Internal event (not enough peers for action 3)")
+        elif action == 4:
+            if len(peer_ids) >= 3:
+                self.send_message(message, peer_ids[2])
+                self.log_event(f"Sent message to VM {peer_ids[2]}")
+            else:
+                self.log_event("Internal event (not enough peers for action 2)")
+        elif action == 5:
+            if len(peer_ids) >= 3:
+                self.send_message(message, peer_ids[1])
+                self.send_message(message, peer_ids[2])
+                self.log_event(f"Sent messages to VM {peer_ids[1]}, {peer_ids[2]}")
+            else:
+                self.log_event("Internal event (not enough peers for action 3)")
+        elif action == 6:
+            if len(peer_ids) >= 3:
+                self.send_message(message, peer_ids[0])
+                self.send_message(message, peer_ids[2])
+                self.log_event(f"Sent messages to VM {peer_ids[0]}, {peer_ids[2]}")
+            else:
+                self.log_event("Internal event (not enough peers for action 3)")
+        elif action == 7:
+            if len(peer_ids) >= 3:
+                self.send_message(message, peer_ids[0])
+                self.send_message(message, peer_ids[1])
+                self.send_message(message, peer_ids[2])
+                self.log_event(
+                    f"Sent messages to VM {peer_ids[0]}, {peer_ids[1]}, {peer_ids[2]}"
+                )
+            else:
+                self.log_event("Internal event (not enough peers for action 3)")
         else:
             self.log_event(f"Internal event")
 

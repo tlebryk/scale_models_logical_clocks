@@ -11,10 +11,10 @@ services:
       PORT: 5001
       PEERS: '{}'
       ENVIRONMENT: docker
-      TOTAL_VMS: 3
+      TOTAL_VMS: 4
       STARTUP_TIMEOUT: 60
       TICK_RATE: 1
-      LOG_DIR: /app/logs/5_max_action
+      LOG_DIR: /app/logs/4_per
       MAX_ACTION: 10
     ports:
       - "5001:5001"
@@ -33,10 +33,10 @@ services:
       PORT: 5002
       PEERS: '{"1": 5001}'
       ENVIRONMENT: docker
-      TOTAL_VMS: 3
+      TOTAL_VMS: 4
       STARTUP_TIMEOUT: 60
       TICK_RATE: 4
-      LOG_DIR: /app/logs/5_max_action
+      LOG_DIR: /app/logs/4_per
       MAX_ACTION: 10
     ports:
       - "5002:5002"
@@ -57,10 +57,10 @@ services:
       PORT: 5003
       PEERS: '{"1": 5001, "2": 5002}'
       ENVIRONMENT: docker
-      TOTAL_VMS: 3
+      TOTAL_VMS: 4
       STARTUP_TIMEOUT: 60
       TICK_RATE: 6
-      LOG_DIR: /app/logs/5_max_action
+      LOG_DIR: /app/logs/4_per
       MAX_ACTION: 10
     ports:
       - "5003:5003"
@@ -71,6 +71,31 @@ services:
     depends_on:
       - vm1
       - vm2
+  vm4:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: lamport-vm4
+    environment:
+      VM_ID: 4
+      PORT: 5004
+      PEERS: '{"1": 5001, "2": 5002, "3": 5003}'
+      ENVIRONMENT: docker
+      TOTAL_VMS: 4
+      STARTUP_TIMEOUT: 60
+      TICK_RATE: 5
+      LOG_DIR: /app/logs/4_per
+      MAX_ACTION: 10
+    ports:
+      - "5004:5004"
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - lamport-network
+    depends_on:
+      - vm1
+      - vm2
+      - vm3
 
 networks:
   lamport-network:
