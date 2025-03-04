@@ -1,126 +1,195 @@
 import pytest
 import logging
 import os
-import re
+import time
 from unittest.mock import patch, MagicMock
-from logger import LogicalClockAdapter, setup_logger
-from clock import LamportClock
+import tempfile
+import shutil
+
+# Import the module to be tested
+import logger
+
+
+# Mock LamportClock for testing
+class MockLamportClock:
+    def __init__(self, name):
+        self.value = 0
+        self.name = name
+
+    def __str__(self):
+        return f"{self.name}:{self.value}"
+
+
+# Fixtures
+@pytest.fixture
+def mock_clock():
+    """Create a mock LamportClock for testing."""
+    return MockLamportClock("test")
 
 
 @pytest.fixture
-def logical_clock():
-    return LamportClock("test_process")
+def temp_log_dir():
+    """Create a temporary directory for log files."""
+    temp_dir = tempfile.mkdtemp()
+    yield temp_dir
+    # Clean up after the test
+    shutil.rmtree(temp_dir)
 
 
-@pytest.fixture
-def cleanup_log_files():
-    # Setup - nothing to do
-    yield
-    # Teardown - remove any log files created during tests
-    for filename in os.listdir("."):
-        if filename.startswith("vm_") and filename.endswith("_log.txt"):
-            os.remove(filename)
+# Tests for LogicalClockFilter
+def test_logical_clock_filter(mock_clock):
+    """Test that LogicalClockFilter adds logical clock information to log records."""
+    # Create a filter
+    filter = logger.LogicalClockFilter(mock_clock)
+
+    # Create a log record
+    record = logging.LogRecord(
+        name="test_logger",
+        level=logging.INFO,
+        pathname="",
+        lineno=0,
+        msg="Test message",
+        args=(),
+        exc_info=None,
+    )
+
+    # Apply the filter
+    filter.filter(record)
+
+    # Check that logical_clock was added to the record
+    assert hasattr(record, "logical_clock")
+    assert record.logical_clock == str(mock_clock)
+
+    # Create a formatter that uses logical_clock
+    formatter = logging.Formatter("%(message)s [LogicalClock: %(logical_clock)s]")
+
+    # Format the record
+    formatted = formatter.format(record)
+
+    # Check that the formatted string contains the logical_clock
+    assert "Test message [LogicalClock: test:0]" == formatted
 
 
-class TestLogicalClockAdapter:
-    def test_process_with_logical_clock(self):
-        """Test that process correctly formats messages when logical_clock is provided."""
-        logger = logging.getLogger("test")
-        adapter = LogicalClockAdapter(logger, {})
-
-        clock = LamportClock("test")
-        clock.value = 42
-
-        msg, kwargs = adapter.process("Test message", {"logical_clock": clock})
-
-        assert msg == "[LogicalClock: test: 42] Test message"
-        assert "logical_clock" not in kwargs
-
-    def test_process_without_logical_clock(self):
-        """Test that process leaves messages unchanged when no logical_clock is provided."""
-        logger = logging.getLogger("test")
-        adapter = LogicalClockAdapter(logger, {})
-
-        msg, kwargs = adapter.process("Test message", {})
-
-        assert msg == "Test message"
-        assert kwargs == {}
+# Tests for setup_logger
+def test_setup_logger_name(mock_clock):
+    """Test that setup_logger creates a logger with the correct name."""
+    with patch("logging.getLogger") as mock_get_logger:
+        with patch("logging.FileHandler"):
+            logger.setup_logger(1, mock_clock)
+            mock_get_logger.assert_called_once_with("VM_1")
 
 
-class TestSetupLogger:
-    def test_setup_logger_creates_handler(self, logical_clock, cleanup_log_files):
-        """Test that setup_logger creates a file handler if none exists."""
-        vm_id = "test1"
-        logger = setup_logger(vm_id, logical_clock)
+def test_setup_logger_level(mock_clock):
+    """Test that setup_logger sets the correct log level."""
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        with patch("logging.FileHandler"):
+            logger.setup_logger(1, mock_clock, log_level=logging.DEBUG)
+            mock_logger.setLevel.assert_called_once_with(logging.DEBUG)
 
-        # Verify the logger is correctly configured
-        assert logger.logger.name == f"VM_{vm_id}"
-        assert logger.logger.level == logging.INFO
-        assert len(logger.logger.handlers) == 1
-        assert isinstance(logger.logger.handlers[0], logging.FileHandler)
-        assert logger.logger.handlers[0].baseFilename.endswith(f"vm_{vm_id}_log.txt")
 
-    def test_setup_logger_reuses_existing_handlers(
-        self, logical_clock, cleanup_log_files
-    ):
-        """Test that setup_logger doesn't add duplicate handlers."""
-        vm_id = "test2"
+def test_setup_logger_adds_filter(mock_clock):
+    """Test that setup_logger adds LogicalClockFilter."""
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        with patch("logging.FileHandler"):
+            logger.setup_logger(1, mock_clock)
+            # Check that addFilter was called with an instance of LogicalClockFilter
+            mock_logger.addFilter.assert_called_once()
+            filter_arg = mock_logger.addFilter.call_args[0][0]
+            assert isinstance(filter_arg, logger.LogicalClockFilter)
+            assert filter_arg.clock == mock_clock
 
-        # Call setup_logger twice with the same vm_id
-        logger1 = setup_logger(vm_id, logical_clock)
-        logger2 = setup_logger(vm_id, logical_clock)
 
-        # Verify no duplicate handlers were created
-        assert len(logger2.logger.handlers) == 1
+def test_setup_logger_creates_log_dir(mock_clock, temp_log_dir):
+    """Test that setup_logger creates the log directory if it doesn't exist."""
+    log_dir = os.path.join(temp_log_dir, "test_logs")
 
-    def test_setup_logger_with_custom_log_level(self, logical_clock, cleanup_log_files):
-        """Test setup_logger with a custom log level."""
-        vm_id = "test3"
-        custom_level = logging.DEBUG
+    # Ensure the directory doesn't exist before the test
+    if os.path.exists(log_dir):
+        shutil.rmtree(log_dir)
 
-        logger = setup_logger(vm_id, logical_clock, log_level=custom_level)
+    with patch("logging.getLogger"):
+        with patch("logging.FileHandler"):
+            with patch("os.makedirs") as mock_makedirs:
+                logger.setup_logger(1, mock_clock, log_dir=log_dir)
+                mock_makedirs.assert_called_once_with(log_dir, exist_ok=True)
 
-        assert logger.logger.level == custom_level
-        assert logger.logger.handlers[0].level == custom_level
 
-    def test_logger_writes_to_file(self, logical_clock, cleanup_log_files):
-        """Test that logs are correctly written to file with timestamp and logical clock."""
-        vm_id = "test4"
-        logger = setup_logger(vm_id, logical_clock)
+def test_setup_logger_creates_file_handler(mock_clock, temp_log_dir):
+    """Test that setup_logger creates a file handler with the correct log file name."""
+    with patch("logging.getLogger"):
+        with patch("logging.FileHandler") as mock_handler:
+            with patch("time.strftime", return_value="2023-01-01_12-00"):
+                logger.setup_logger(1, mock_clock, log_dir=temp_log_dir, file_mode="a")
 
-        # Log a test message
-        test_message = "This is a test log message"
-        logger.info(test_message)
+                # Check that FileHandler was created with the correct arguments
+                mock_handler.assert_called_once()
+                file_name = mock_handler.call_args[0][0]
 
-        # Verify the message was written to the log file
-        log_file_path = f"vm_{vm_id}_log.txt"
-        assert os.path.exists(log_file_path)
+                # Verify the file name format
+                assert file_name == os.path.join(
+                    temp_log_dir, "vm_log_2023-01-01_12-00_1.txt"
+                )
 
-        with open(log_file_path, "r") as f:
-            log_content = f.read()
+                # Verify the file mode
+                assert mock_handler.call_args[1]["mode"] == "a"
 
-        # Check log format
-        assert f"VM VM_{vm_id}" in log_content
-        assert "INFO" in log_content
-        assert f"[LogicalClock: {logical_clock}]" in log_content
-        assert test_message in log_content
 
-        # Check timestamp format (should match "YYYY-MM-DD HH:MM:SS,mmm" format)
-        timestamp_pattern = r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}"
-        assert re.search(timestamp_pattern, log_content) is not None
+def test_setup_logger_sets_formatter(mock_clock):
+    """Test that setup_logger sets the correct formatter."""
+    with patch("logging.getLogger"):
+        with patch("logging.FileHandler") as mock_handler:
+            mock_file_handler = MagicMock()
+            mock_handler.return_value = mock_file_handler
 
-    @patch("logging.FileHandler")
-    def test_log_formatter(self, mock_file_handler, logical_clock):
-        """Test that the correct formatter is applied to the logger."""
-        mock_handler_instance = MagicMock()
-        mock_file_handler.return_value = mock_handler_instance
+            logger.setup_logger(1, mock_clock)
 
-        setup_logger("test5", logical_clock)
+            # Check that setFormatter was called
+            mock_file_handler.setFormatter.assert_called_once()
 
-        # Verify the formatter was set
-        mock_handler_instance.setFormatter.assert_called_once()
-        formatter = mock_handler_instance.setFormatter.call_args[0][0]
+            # Check that the formatter includes logical_clock
+            formatter = mock_file_handler.setFormatter.call_args[0][0]
+            assert "%(logical_clock)s" in formatter._fmt
 
-        # Check formatter format string
-        expected_format = "%(asctime)s | VM %(name)s | %(levelname)s | %(message)s"
-        assert formatter._fmt == expected_format
+
+def test_setup_logger_returns_logger(mock_clock):
+    """Test that setup_logger returns a logger."""
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger = MagicMock()
+        mock_get_logger.return_value = mock_logger
+        with patch("logging.FileHandler"):
+            result = logger.setup_logger(1, mock_clock)
+            assert result == mock_logger
+
+
+def test_setup_logger_clears_existing_handlers(mock_clock):
+    """Test that setup_logger clears any existing handlers."""
+    with patch("logging.getLogger") as mock_get_logger:
+        mock_logger = MagicMock()
+        # Add a mock handler to the logger
+        mock_handler = MagicMock()
+        mock_logger.handlers = [mock_handler]
+        mock_get_logger.return_value = mock_logger
+
+        with patch("logging.FileHandler"):
+            logger.setup_logger(1, mock_clock)
+
+            # Check that removeHandler was called for the existing handler
+            mock_logger.removeHandler.assert_called_once_with(mock_handler)
+
+
+def test_setup_logger_handler_level(mock_clock):
+    """Test that setup_logger sets the correct log level on the file handler."""
+    with patch("logging.getLogger"):
+        with patch("logging.FileHandler") as mock_handler:
+            mock_file_handler = MagicMock()
+            mock_handler.return_value = mock_file_handler
+
+            custom_level = logging.WARNING
+            logger.setup_logger(1, mock_clock, log_level=custom_level)
+
+            # Check that the handler level was set
+            mock_file_handler.setLevel.assert_called_once_with(custom_level)
