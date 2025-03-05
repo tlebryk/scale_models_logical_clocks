@@ -33,6 +33,11 @@ def get_vm_host(vm_id):
 
 
 class VM:
+    """
+    A class representing a virtual machine in a distributed system with Lamport clock
+    
+    Each VM can send and receive messages to/from its peers, and it maintains a logical clock
+    """
     def __init__(
         self,
         vm_id: int,
@@ -104,6 +109,12 @@ class VM:
             )
 
     def internal_action(self):
+
+        """
+        Perform an internal action for the VM.
+        
+        Randomly decides whether to send messages to peers or simply log an internal event.
+        """
         action = random.randint(1, 10)
 
         message = json.dumps({"sender": self.vm_id, "clock": self.clock.value}).encode(
@@ -146,6 +157,9 @@ class VM:
         self.log_event(event)
 
     def send_message(self, message: bytearray, destination_vm_id: int):
+        """
+        Send a message to a specific peer VM.
+        """
         # Ensure the connection is established in case it was dropped or something
         if destination_vm_id not in self.peer_sockets:
             self.setup_peer_connection(destination_vm_id)
@@ -164,7 +178,11 @@ class VM:
             self.logger.error(f"No connection available for VM {destination_vm_id}")
 
     def event_loop(self):
-        # continuous event loop to simulate clock ticks
+        """
+        Continuously execute the event loop to process incoming messages or perform internal actions
+        
+        The loop runs until the specified run time is reached
+        """
         looptime = time.time()
         while True:
 
@@ -193,6 +211,11 @@ class VM:
 
     # Modify the run method to wait for all VMs
     def run(self):
+        """
+        Start the VM by initializing the server, setting up peer connections, and beginning the event loop.
+        
+        Also sends an initial ping to all connected peers after all expected connections are established.
+        """
         self.logger.info(f"Starting VM {self.vm_id} with tick rate {self.tick_rate}")
         self.start_server()
         time.sleep(1)
@@ -221,6 +244,13 @@ class VM:
 
     # Update the start_server method
     def start_server(self):
+        """
+        Start a server socket to listen for incoming connections.
+        
+        Binds to the appropriate interface based on the environment (Docker or local) and
+        spawns a thread to continuously accept connections.
+        """
+        
         # Start a server to listen for incoming connections
         self.server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -298,7 +328,11 @@ class VM:
             self.setup_peer_connection(peer_id)
 
     def accept_connections(self):
-        # continuously accept incoming connections from other VMs
+        """
+        Continuously accept incoming connections from other VMs.
+        
+        Each accepted connection is handled in a new thread.
+        """
         while True:
             client_socket, addr = self.server_socket.accept()
             self.logger.info(f"Accepted connection from {addr}")
