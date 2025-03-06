@@ -93,3 +93,5 @@ To run tests locally, use one of the following command:
   python -m pytest
   ```
 
+## Engineering Notebook 
+https://docs.google.com/document/d/1cDx4k8suhNlnMrpiNQisLFFd6PEze0XO3bSoEqIxW5k/edit?usp=sharing
